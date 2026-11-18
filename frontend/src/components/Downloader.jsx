@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Check, ClipboardPaste, Download, ExternalLink, Info, Loader2, Play, Search, Sparkles, Upload, X } from 'lucide-react';
-import { api, fileUrl, triggerDownload } from '../services/api.js';
+import { Check, ClipboardPaste, Download, ExternalLink, Info, Loader2, Play, Search, Server, Settings, Sparkles, Upload, X } from 'lucide-react';
+import { api, fileUrl, getApiBase, setApiBase, triggerDownload } from '../services/api.js';
 import { detectPlatform } from '../utils/platform.js';
 import { bytes, duration } from '../utils/format.js';
 import { logActivity } from '../hooks/useActivity.js';
@@ -18,7 +18,32 @@ export default function Downloader() {
   const [data, setData] = useState(null);
   const [selectedOption, setSelectedOption] = useState(null);
   const [play, setPlay] = useState(false);
+
+  // Backend URL configuration
+  const [currentBackend, setCurrentBackend] = useState('');
+  const [backendInput, setBackendInput] = useState('');
+  const [showBackendConfig, setShowBackendConfig] = useState(false);
+
+  useEffect(() => {
+    const base = getApiBase();
+    setCurrentBackend(base);
+    setBackendInput(base);
+    if (!base && window.location.hostname !== 'localhost') {
+      setShowBackendConfig(true);
+    }
+  }, []);
+
   const detected = useMemo(() => (url.trim() ? detectPlatform(url) : null), [url]);
+
+  function saveBackendUrl(e) {
+    e?.preventDefault();
+    const clean = (backendInput || '').trim().replace(/\/$/, '');
+    setApiBase(clean);
+    setCurrentBackend(clean);
+    toast(clean ? `Backend URL updated to: ${clean}` : 'Backend URL reset to default.');
+    setShowBackendConfig(false);
+    setError('');
+  }
 
   async function paste() {
     try {
@@ -57,7 +82,12 @@ export default function Downloader() {
       setSelectedOption(d.options?.[0]?.id || 'best');
       logActivity({ type: 'inspect', title: d.title, platform: d.platform, url: d.canonicalUrl });
     } catch (err) {
-      setError(err.message || 'Could not fetch video. Please check the URL.');
+      if (err.message?.includes('405') || err.code === 'BACKEND_NOT_CONFIGURED') {
+        setShowBackendConfig(true);
+        setError('Your backend server is not connected yet. Please paste your live Render URL below.');
+      } else {
+        setError(err.message || 'Could not fetch video. Please check the URL.');
+      }
     } finally {
       setBusy(false);
     }
@@ -78,6 +108,54 @@ export default function Downloader() {
 
   return (
     <div>
+      {/* Backend connection indicator / configuration bar */}
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-xs">
+        <div className="flex items-center gap-2">
+          <Server className="h-4 w-4 text-emerald-400" />
+          <span>Backend Server:</span>
+          {currentBackend ? (
+            <span className="font-mono text-emerald-400 font-semibold truncate max-w-xs">{currentBackend}</span>
+          ) : (
+            <span className="text-amber-400 font-semibold">Not configured (Vercel static)</span>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowBackendConfig(!showBackendConfig)}
+          className="btn-ghost !py-1 !px-2 text-xs flex items-center gap-1"
+        >
+          <Settings className="h-3.5 w-3.5" />
+          {currentBackend ? 'Change Backend URL' : 'Connect Render Backend'}
+        </button>
+      </div>
+
+      {showBackendConfig && (
+        <form onSubmit={saveBackendUrl} className="mb-5 glass p-4 md:p-5 border-emerald-500/30">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-sm font-bold flex items-center gap-2">
+              <Server className="h-4 w-4 text-emerald-400" /> Connect your Live Render Backend
+            </h3>
+            <button type="button" onClick={() => setShowBackendConfig(false)} className="btn-ghost !p-1 text-xs">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <p className="text-xs text-muted mb-3">
+            Paste your Render service URL here (e.g. <code className="bg-white/10 px-1 py-0.5 rounded">https://clipflow-api.onrender.com</code>). It will be saved directly in your browser.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <input
+              className="field !py-2.5 text-sm flex-1 font-mono"
+              placeholder="https://your-app-name.onrender.com"
+              value={backendInput}
+              onChange={(e) => setBackendInput(e.target.value)}
+            />
+            <button type="submit" className="btn-3d btn-mint !py-2.5 px-5 text-sm">
+              Save & Connect
+            </button>
+          </div>
+        </form>
+      )}
+
       <Tilt max={2.5} className="glass p-4 md:p-6">
         <form onSubmit={(e) => { e.preventDefault(); fetchVideoWithUrl(); }}>
           <label htmlFor="video-url" className="mb-2 block text-sm font-bold">

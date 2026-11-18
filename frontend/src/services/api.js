@@ -1,17 +1,53 @@
 import axios from 'axios';
 
-export const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
-const http = axios.create({ baseURL: API_BASE, timeout: 15 * 60 * 1000 });
+export function getApiBase() {
+  if (typeof window !== 'undefined') {
+    const custom = localStorage.getItem('clipflow_api_base');
+    if (custom && custom.trim()) return custom.trim().replace(/\/$/, '');
+  }
+  return (import.meta.env.VITE_API_BASE_URL || '').trim().replace(/\/$/, '');
+}
 
-export const fileUrl = (path, inline = false) => `${API_BASE}${path}${inline ? `${path.includes('?') ? '&' : '?'}inline=1` : ''}`;
+export function setApiBase(url) {
+  if (typeof window !== 'undefined') {
+    if (url && url.trim()) {
+      localStorage.setItem('clipflow_api_base', url.trim().replace(/\/$/, ''));
+    } else {
+      localStorage.removeItem('clipflow_api_base');
+    }
+  }
+}
+
+const http = axios.create({ timeout: 15 * 60 * 1000 });
+
+http.interceptors.request.use((req) => {
+  const base = getApiBase();
+  if (base && !req.url.startsWith('http')) {
+    req.baseURL = base;
+  }
+  return req;
+});
+
+export const fileUrl = (path, inline = false) => {
+  const base = getApiBase();
+  const full = `${base}${path}`;
+  return `${full}${inline ? `${full.includes('?') ? '&' : '?'}inline=1` : ''}`;
+};
 
 function fail(e) {
+  if (e.response?.status === 405) {
+    const out = new Error('Backend URL not connected. Please enter your Render backend URL in the settings above.');
+    out.code = 'BACKEND_NOT_CONFIGURED';
+    throw out;
+  }
   const err = e.response?.data?.error;
-  const msg = err?.message || (e.code === 'ERR_NETWORK' ? 'Cannot reach the ClipFlow server. Make sure the backend is running (npm run dev:backend).' : e.message);
+  const msg = err?.message || (e.code === 'ERR_NETWORK' ? 'Cannot reach the backend server. Please verify your Render backend URL.' : e.message);
   const out = new Error(msg);
-  out.code = err?.code; out.data = err;
+  out.code = err?.code || e.code;
+  out.data = err;
   throw out;
 }
+
 const get = (p) => http.get(p).then((r) => r.data).catch(fail);
 const post = (p, body) => http.post(p, body).then((r) => r.data).catch(fail);
 
@@ -62,6 +98,10 @@ export const api = {
 
 export function triggerDownload(path) {
   const a = document.createElement('a');
-  a.href = fileUrl(path); a.rel = 'noopener'; a.download = '';
-  document.body.appendChild(a); a.click(); a.remove();
+  a.href = path.startsWith('http') ? path : fileUrl(path);
+  a.rel = 'noopener';
+  a.download = '';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
 }
