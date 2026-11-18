@@ -1,0 +1,16 @@
+{
+  "name": "clipflow",
+  "private": true,
+  "version": "1.0.0",
+  "description": "ClipFlow monorepo helper scripts",
+  "scripts": {
+    "install:all": "npm --prefix backend install && npm --prefix frontend install",
+    "dev:backend": "npm --prefix backend run dev",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "dev": "concurrently -n api,web -c magenta,cyan \"npm:dev:backend\" \"npm:dev:frontend\"",
+    "build": "npm --prefix frontend run build",
+    "test": "npm --prefix backend test",
+    "test:frontend": "npm --prefix frontend test"
+  },
+  "devDependencies": { "concurrently": "^9.0.1" }
+}
