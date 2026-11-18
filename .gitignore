@@ -10,5 +10,6 @@ dist/
 *.webm
 *.mov
 *.mkv
-uploads/
-jobs/
+/uploads/
+/jobs/
+!backend/src/jobs/
